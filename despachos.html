@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendario</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #4682B4;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        table {
+            width: 100%;
+            max-width: 600px;
+            border-collapse: collapse;
+            margin-bottom: 3cm;
+        }
+        th, td {
+            border: 1px solid #000;
+            text-align: center;
+            padding: 10px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        th {
+            background-color: #5F9EA0;
+            color: white;
+        }
+        .blocked {
+            color: red;
+            text-decoration: line-through;
+        }
+        .spacer {
+            height: 30px;
+        }
+        .info-box, .buttons, .navigation-buttons {
+            width: 100%;
+            max-width: 600px;
+            margin-top: 20px;
+        }
+        .hidden {
+            display: none;
+        }
+        .logo {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 4cm;
+        }
+        .username-input {
+            background-color: #D3D3D3;
+            border: 1px solid #000;
+            padding: 5px;
+        }
+        .center-text {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .username-container {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            width: 100%;
+            max-width: 600px;
+            margin-bottom: 20px;
+            margin-left: 3cm; /* Corregido */
+        }
+        .username-container label {
+            margin-right: 10px;
+        }
+        .past-day {
+            color: #ccc;
+            pointer-events: none;
+        }
+        .weekend {
+            background-color: #f0e68c; /* Estilo para fines de semana */
+        }
+        .form-container {
+            margin-top: 20px;
+            width: 100%;
+            max-width: 600px;
+        }
+        .form-container label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-container input, .form-container textarea {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #000;
+            box-sizing: border-box;
+        }
+        .disabled {
+            pointer-events: none;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <h1 class="center-text">DESPACHO DE BANDEJAS</h1>
+    <img src="sps.png" alt="Logo SPS" class="logo">
+    <h2 id="monthYear"></h2>
+    <div class="username-container">
+        <label for="username">Nombre de usuario:</label>
+        <input type="text" id="username" name="username" class="username-input" onkeypress="checkEnter(event)">
+    </div>
+    <div class="spacer"></div>
+    <div class="navigation-buttons disabled">
+        <button onclick="previousMonth()">Anterior</button>
+        <button onclick="nextMonth()">Siguiente</button>
+    </div>
+    <table class="disabled">
+        <thead>
+            <tr>
+                <th>Lunes</th>
+                <th>Martes</th>
+                <th>Miércoles</th>
+                <th>Jueves</th>
+                <th>Viernes</th>
+                <th>Sábado</th>
+                <th>Domingo</th>
+            </tr>
+        </thead>
+        <tbody id="calendarBody">
+            <!-- Días del calendario se generarán aquí -->
+        </tbody>
+    </table>
+    <div class="buttons">
+        <button onclick="sendEmail()">Enviar</button>
+        <button onclick="promptReset()">Resetear</button>
+        <button id="resetButton" class="hidden" onclick="resetCalendar()">Confirmar Reseteo</button>
+        <button onclick="exportCalendar()">Exportar</button>
+        <button onclick="logout()">Cerrar Sesión</button>
+    </div>
+    <div class="info-box">
+        <h3>Días Seleccionados</h3>
+        <ul id="selectedDaysList">
+            <!-- Lista de días seleccionados se generará aquí -->
+        </ul>
+    </div>
+    <div class="form-container disabled">
+        <h3>Formulario de Información</h3>
+        <label for="farmerName">Nombre del Agricultor:</label>
+        <input type="text" id="farmerName" name="farmerName">
+        <label for="address">Dirección:</label>
+        <input type="text" id="address" name="address">
+        <label for="phone">Teléfono:</label>
+        <input type="text" id="phone" name="phone">
+        <label for="responsible">Responsable:</label>
+        <input type="text" id="responsible" name="responsible">
+        <label for="quantity">Cantidad de Bandejas:</label>
+        <input type="number" id="quantity" name="quantity" min="1" max="700">
+        <button onclick="addToSummary()">Agregar al Resumen</button>
+    </div>
+    <div class="info-box">
+        <h3>Resumen del Despacho</h3>
+        <ul id="dispatchSummary">
+            <!-- Resumen del despacho se generará aquí -->
+        </ul>
+    </div>
+
+    <script>
+        const authorizedUsers = ["Claudio", "Ignacio", "Rafael R.", "Rafael r."];
+        let blockedDays = {};
+        let currentUser = '';
+        let currentMonth = new Date().getMonth();
+        let currentYear = new Date().getFullYear();
+        const maxBandejasPorDia = 700;
+        let bandejasPorDia = {};
+        let dispatchInfo = [];
+        let selectedDay = null;
+
+        function checkEnter(event) {
+            if (event.key === 'Enter') {
+                currentUser = event.target.value;
+                if (authorizedUsers.includes(currentUser)) {
+                    enableCalendar();
+                } else {
+                    alert("Usuario no autorizado.");
+                    currentUser = '';
+                }
+            }
+        }
+
+        function enableCalendar() {
+            document.querySelector('.navigation-buttons').classList.remove('disabled');
+            document.querySelector('table').classList.remove('disabled');
+        }
+
+        function blockDay(cell) {
+            if (currentUser && authorizedUsers.includes(currentUser)) {
+                selectedDay = cell.dataset.day;
+                if (!bandejasPorDia[selectedDay]) {
+                    bandejasPorDia[selectedDay] = 0;
+                }
+                if (!blockedDays[selectedDay]) {
+                    cell.classList.add('blocked');
+                    cell.innerHTML = 'X';
+                    blockedDays[selectedDay] = currentUser;
+                    updateFormDate(selectedDay);
+                    enableForm();
+                } else {
+                    alert("Este día ya ha sido seleccionado por otro usuario.");
+                }
+            } else {
+                alert("Por favor, ingrese un nombre de usuario autorizado y presione Enter.");
+            }
+        }
+
+        function enableForm() {
+            document.querySelector('.form-container').classList.remove('disabled');
+        }
+
+        function updateSelectedDaysList() {
+            const selectedDaysList = document.getElementById('selectedDaysList');
+            selectedDaysList.innerHTML = '';
+            for (const day in blockedDays) {
+                const listItem = document.createElement('li');
+                listItem.textContent = `Día ${day}: ${blockedDays[day]} (${bandejasPorDia[day]} bandejas)`;
+                selectedDaysList.appendChild(listItem);
+            }
+        }
+
+        function updateFormDate(day) {
+            const formDate = document.getElementById('formDate');
+            if (formDate) {
+                formDate.value = day;
+            } else {
+                const formContainer = document.querySelector('.form-container');
+                const dateLabel = document.createElement('label');
+                dateLabel.setAttribute('for', 'formDate');
+                dateLabel.textContent = 'Fecha de Despacho:';
+                const dateInput = document.createElement('input');
+                dateInput.setAttribute('type', 'text');
+                dateInput.setAttribute('id', 'formDate');
+                dateInput.setAttribute('name', 'formDate');
+                dateInput.setAttribute('readonly', 'readonly');
+                dateInput.value = day;
+                formContainer.insertBefore(dateLabel, formContainer.firstChild);
+                formContainer.insertBefore(dateInput, formContainer.firstChild);
+            }
+        }
+
+        function previousMonth() {
+            if (currentMonth === 0) {
+                currentMonth = 11;
+                currentYear--;
+            } else {
+                currentMonth--;
+            }
+            generateCalendar(currentMonth, currentYear);
+        }
+
+        function nextMonth() {
+            if (currentMonth === 11) {
+                currentMonth = 0;
+                currentYear++;
+            } else {
+                currentMonth++;
+            }
+            generateCalendar(currentMonth, currentYear);
+        }
+
+        function generateCalendar(month, year) {
+            const today = new Date();
+            const firstDay = new Date(year, month, 1).getDay();
+            const lastDate = new Date(year, month + 1, 0).getDate();
+
+            const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+            document.getElementById('monthYear').innerText = `${monthNames[month]} ${year}`;
+
+            const calendarBody = document.getElementById('calendarBody');
+            calendarBody.innerHTML = '';
+
+            let date = 1;
+            for (let i = 0; i < 6; i++) {
+                let row = document.createElement('tr');
+                for (let j = 1; j <= 7; j++) {
+                    let cell = document.createElement('td');
+                    if (i === 0 && j < firstDay) {
+                        cell.innerHTML = '';
+                    } else if (date > lastDate) {
+                        break;
+                    } else {
+                        cell.innerHTML = date;
+                        cell.dataset.day = date;
+                        const cellDate = new Date(year, month, date);
+                        if (cellDate < today.setHours(0, 0, 0, 0) && month === today.getMonth() && year === today.getFullYear()) {
+                            cell.classList.add('past-day');
+                            cell.title = "No se puede seleccionar días pasados";
+                        } else if (j === 6 || j === 7) {
+                            cell.classList.add('weekend');
+                        } else {
+                            if (blockedDays[date]) {
+                                cell.classList.add('blocked');
+                                cell.innerHTML = 'X';
+                            } else {
+                                cell.onclick = function() { blockDay(cell); };
+                            }
+                        }
+                        date++;
+                    }
+                    row.appendChild(cell);
+                }
+                calendarBody.appendChild(row);
+            }
+        }
+
+        function sendEmail() {
+            const selectedDays = Object.keys(blockedDays).map(day => `Día ${day}: ${blockedDays[day]} (${bandejasPorDia[day]} bandejas)`);
+            fetch('/send-email', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    username: currentUser,
+                    selectedDays: selectedDays
+                })
+            })
+            .then(response => response.text())
+            .then(data => alert(data))
+            .catch(error => console.error('Error:', error));
+        }
+
+        function promptReset() {
+            const resetButton = document.getElementById('resetButton');
+            resetButton.classList.remove('hidden');
+            const resetPassword = prompt("Ingrese la clave de reseteo:");
+            if (resetPassword === '1985') {
+                resetCalendar();
+            } else {
+                alert("Clave de reseteo incorrecta.");
+                resetButton.classList.add('hidden');
+            }
+        }
+
+        function resetCalendar() {
+            blockedDays = {};
+            bandejasPorDia = {};
+            dispatchInfo = [];
+            selectedDay = null;
+            generateCalendar(currentMonth, currentYear);
+            updateSelectedDaysList();
+            document.getElementById('dispatchSummary').innerHTML = '';
+            document.getElementById('resetButton').classList.add('hidden');
+            // Limpiar localStorage
+            localStorage.removeItem('dispatchInfo');
+        }
+
+        function exportCalendar() {
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "Día,Usuario,Bandejas,Nombre del Agricultor,Dirección,Teléfono,Responsable\n";
+            dispatchInfo.forEach(info => {
+                csvContent += `${info.day},${info.user},${info.bandejas},${info.farmerName},${info.address},${info.phone},${info.responsible}\n`;
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "calendario_despacho.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function addToSummary() {
+            const farmerName = document.getElementById('farmerName').value;
+            const address = document.getElementById('address').value;
+            const phone = document.getElementById('phone').value;
+            const responsible = document.getElementById('responsible').value;
+            const quantity = parseInt(document.getElementById('quantity').value);
+            if (!farmerName || !address || !phone || !responsible || isNaN(quantity) || quantity <= 0 || quantity > maxBandejasPorDia) {
+                alert("Por favor, complete todos los campos con información válida.");
+                return;
+            }
+            if (!selectedDay) {
+                alert("Por favor, seleccione un día en el calendario.");
+                return;
+            }
+            if (bandejasPorDia[selectedDay] + quantity > maxBandejasPorDia) {
+                alert("No se pueden agregar más despachos para este día. Se ha alcanzado el límite de 700 bandejas.");
+                return;
+            }
+            bandejasPorDia[selectedDay] += quantity;
+            const dispatchSummary = document.getElementById('dispatchSummary');
+            const listItem = document.createElement('li');
+            listItem.textContent = `Día ${selectedDay}: ${farmerName}, ${address}, ${phone}, ${responsible}, ${quantity} bandejas`;
+            dispatchSummary.appendChild(listItem);
+
+            const dispatchInfoEntry = {
+                day: selectedDay,
+                user: blockedDays[selectedDay],
+                bandejas: bandejasPorDia[selectedDay],
+                farmerName: farmerName,
+                address: address,
+                phone: phone,
+                responsible: responsible
+            };
+            dispatchInfo.push(dispatchInfoEntry);
+
+            // Guardar en localStorage
+            localStorage.setItem('dispatchInfo', JSON.stringify(dispatchInfo));
+        }
+
+        function logout() {
+            currentUser = '';
+            document.getElementById('username').value = '';
+            alert("Sesión cerrada.");
+            // Opcional: Recargar la página para limpiar el estado
+            location.reload();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            generateCalendar(currentMonth, currentYear);
+
+            // Cargar datos desde localStorage
+            const storedDispatchInfo = localStorage.getItem('dispatchInfo');
+            if (storedDispatchInfo) {
+                dispatchInfo = JSON.parse(storedDispatchInfo);
+                dispatchInfo.forEach(info => {
+                    const listItem = document.createElement('li');
+                    listItem.textContent = `Día ${info.day}: ${info.farmerName}, ${info.address}, ${info.phone}, ${info.responsible}, ${info.bandejas} bandejas`;
+                    document.getElementById('dispatchSummary').appendChild(listItem);
+                    if (!bandejasPorDia[info.day]) {
+                        bandejasPorDia[info.day] = 0;
+                    }
+                    bandejasPorDia[info.day] += info.bandejas;
+                    blockedDays[info.day] = info.user;
+                });
+            }
+        });
+    </script>
+</body>
+</html>
